@@ -73,6 +73,19 @@ async def ask_groq_with_history(user_id, new_message):
     except Exception as e:
         return f"🧠 ошибка: {str(e)[:50]}..."
 
+async def get_chat_entity(user_id):
+    """Получить сущность чата по user_id"""
+    try:
+        # Пробуем получить через диалоги
+        async for dialog in client.iter_dialogs():
+            if dialog.entity.id == user_id:
+                return dialog.entity
+        # Если не нашли, пробуем через get_entity
+        return await client.get_entity(user_id)
+    except Exception as e:
+        print(f"⚠️ Ошибка получения сущности для {user_id}: {e}")
+        return None
+
 @client.on(events.NewMessage(incoming=True))
 async def handler(event):
     if not event.is_private:
@@ -86,22 +99,16 @@ async def handler(event):
         return
     
     user_id = event.sender_id
-    
-    # 🔥 ОБХОД ОШИБКИ: получаем сущность чата заранее
-    try:
-        chat_entity = await client.get_input_entity(event.chat_id)
-    except Exception as e:
-        print(f"⚠️ Ошибка получения chat_entity: {e}")
-        # Пробуем альтернативный способ
-        try:
-            chat_entity = await client.get_input_entity(user_id)
-        except:
-            print("❌ Не удалось получить сущность чата")
-            return
-    
     print(f"\n📥 [От {user_id}]: {user_message}")
     
+    # 🔥 НОВЫЙ МЕТОД: получаем сущность через диалоги
+    chat_entity = await get_chat_entity(user_id)
+    if not chat_entity:
+        print(f"❌ Не удалось получить сущность для {user_id}")
+        return
+    
     try:
+        # Отправляем статус "печатает"
         async with client.action(chat_entity, "typing"):
             await asyncio.sleep(random.uniform(1.5, 3.5))
             reply = await ask_groq_with_history(user_id, user_message)
@@ -112,10 +119,18 @@ async def handler(event):
 
 async def main():
     await client.start()
+    
+    # 🔥 ПРЕДВАРИТЕЛЬНАЯ ЗАГРУЗКА ДИАЛОГОВ
+    print("🔄 Загрузка диалогов...")
+    async for _ in client.iter_dialogs(limit=10):
+        pass  # Просто проходим по диалогам, чтобы заполнить кэш
+    print("✅ Диалоги загружены")
+    
     print("\n" + "="*50)
-    print("✅ Бот запущен (финальная версия)")
+    print("✅ Бот запущен (с предзагрузкой диалогов)")
     print("📌 Теперь напиши второму аккаунту с основного")
     print("="*50 + "\n")
+    
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
