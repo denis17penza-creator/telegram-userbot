@@ -12,6 +12,9 @@ API_HASH = os.getenv('API_HASH', '')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
 SESSION_STRING = os.getenv('SESSION_STRING', '')
 
+# 🔥 ТВОЙ USER_ID (узнай через @userinfobot)
+MY_USER_ID = 1101377117  # ЗАМЕНИ НА СВОИ ЦИФРЫ!
+
 if not API_ID or not API_HASH or not GROQ_API_KEY:
     raise ValueError("Ошибка: не заданы API_ID, API_HASH или GROQ_API_KEY")
 
@@ -73,19 +76,6 @@ async def ask_groq_with_history(user_id, new_message):
     except Exception as e:
         return f"🧠 ошибка: {str(e)[:50]}..."
 
-async def get_chat_entity(user_id):
-    """Получить сущность чата по user_id"""
-    try:
-        # Пробуем получить через диалоги
-        async for dialog in client.iter_dialogs():
-            if dialog.entity.id == user_id:
-                return dialog.entity
-        # Если не нашли, пробуем через get_entity
-        return await client.get_entity(user_id)
-    except Exception as e:
-        print(f"⚠️ Ошибка получения сущности для {user_id}: {e}")
-        return None
-
 @client.on(events.NewMessage(incoming=True))
 async def handler(event):
     if not event.is_private:
@@ -99,38 +89,27 @@ async def handler(event):
         return
     
     user_id = event.sender_id
-    print(f"\n📥 [От {user_id}]: {user_message}")
     
-    # 🔥 НОВЫЙ МЕТОД: получаем сущность через диалоги
-    chat_entity = await get_chat_entity(user_id)
-    if not chat_entity:
-        print(f"❌ Не удалось получить сущность для {user_id}")
+    # 📌 ОТВЕЧАЕМ ТОЛЬКО ТЕБЕ (по user_id)
+    if user_id != MY_USER_ID:
+        print(f"📥 [Игнорирую {user_id}]: не владелец")
         return
     
-    try:
-        # Отправляем статус "печатает"
-        async with client.action(chat_entity, "typing"):
-            await asyncio.sleep(random.uniform(1.5, 3.5))
-            reply = await ask_groq_with_history(user_id, user_message)
-            print(f"📤 [Ответ]: {reply}")
-            await client.send_message(chat_entity, reply)
-    except Exception as e:
-        print(f"⚠️ Ошибка при отправке: {e}")
+    print(f"\n📥 [От {user_id}]: {user_message}")
+    
+    # Просто засыпаем и отвечаем через send_message
+    await asyncio.sleep(random.uniform(1.5, 3.5))
+    reply = await ask_groq_with_history(user_id, user_message)
+    print(f"📤 [Ответ]: {reply}")
+    await event.reply(reply)
 
 async def main():
     await client.start()
-    
-    # 🔥 ПРЕДВАРИТЕЛЬНАЯ ЗАГРУЗКА ДИАЛОГОВ
-    print("🔄 Загрузка диалогов...")
-    async for _ in client.iter_dialogs(limit=10):
-        pass  # Просто проходим по диалогам, чтобы заполнить кэш
-    print("✅ Диалоги загружены")
-    
     print("\n" + "="*50)
-    print("✅ Бот запущен (с предзагрузкой диалогов)")
-    print("📌 Теперь напиши второму аккаунту с основного")
+    print("✅ Бот запущен (отвечает только владельцу)")
+    print(f"📌 Владелец: {MY_USER_ID}")
+    print("📌 Напиши второму аккаунту с основного")
     print("="*50 + "\n")
-    
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
